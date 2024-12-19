@@ -25,6 +25,7 @@ Route::post('/messages', function () {
     $message->user_id = $user->id;
     $message->save();
 
+    broadcast(new App\Events\MessagePosted($message, $user))->toOthers();
     return ['message' => $message->load('user')];
 })->middleware('auth');
 

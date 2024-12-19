@@ -7,6 +7,11 @@
 
     onBeforeMount(() => {
         loadMessage();
+        Echo.channel("laravel_database_chatroom").listen("MessagePosted", (data) => {
+            const message = data.message;
+            message.user = data.user;
+            list_messages.value.push(message);
+        });
     });
 
     async function loadMessage() {
