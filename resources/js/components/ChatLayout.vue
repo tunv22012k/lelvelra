@@ -1,54 +1,110 @@
 <script setup>
-    import { ref, onBeforeMount } from 'vue';
-    import ChatItem from './ChatItem.vue';
+import { ref, onBeforeMount, onMounted, nextTick } from "vue";
+import ChatItem from './ChatItem.vue'
+import laravelEchoServer from '../../../laravel-echo-server.json'
 
-    const message = ref('');
-    const list_messages = ref([]);
+const message = ref('');
+const list_messages = ref([]);
 
-    onBeforeMount(() => {
-        loadMessage();
-        Echo.channel("laravel_database_chatroom").listen("MessagePosted", (data) => {
-            const message = data.message;
-            message.user = data.user;
-            list_messages.value.push(message);
-        });
+const { appId, key } = laravelEchoServer.clients[0]; // thêm mới
+const csrfToken = ref(''); // thêm mới
+const usersOnline = ref(0); // thêm mới
+
+onBeforeMount(() => {
+    loadMessage();
+    Echo.channel("laravel_database_chatroom").listen("MessagePosted", (data) => {
+        const message = data.message;
+        message.user = data.user;
+        list_messages.value.push(message);
+
+        scrollToBottom();
     });
+});
 
-    async function loadMessage() {
-        try {
-            const response = await axios.get('/messages');
-            list_messages.value = response.data;
-        } catch (error) {
-            console.log(error);
-        }
-    }
+onMounted(() => {
+    // lấy giá trị csrfToken
+    csrfToken.value = document.head.querySelector('meta[name="csrf-token"]').content;
 
-    async function sendMessage() {
-        try {
-            const response = await axios.post('/messages', {
-                message: message.value
-            });
-            list_messages.value.push(response.data.message);
-            message.value = '';
-        } catch (error) {
-            console.log(error);
-        }
+    setInterval(() => {
+        getUsersOnline() // lấy số users online mỗi 3 giây (tuỳ chỉnh theo ý muốn)
+    }, 3000);
+})
+
+async function loadMessage() {
+    try {
+        const response = await axios.get('/messages');
+        list_messages.value = response.data;
+
+        scrollToBottom();
+    } catch (error) {
+        console.log(error);
     }
+}
+
+async function sendMessage() {
+    try {
+        const response = await axios.post('/messages', {
+            message: message.value
+        })
+        list_messages.value.push(response.data.message);
+        message.value = '';
+        scrollToBottom();
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+async function getUsersOnline() {
+    try {
+        const response = await axios.get(
+            `${window.location.protocol}//${window.location.hostname}:6001/apps/${appId}/channels/laravel_database_chatroom?auth_key=${key}`
+        );
+        usersOnline.value = response.data.subscription_count;
+
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+function scrollToBottom() {
+    nextTick(() => {
+        const messages = document.querySelector('.messages');
+        // scroll đến cuối cùng
+        messages.scrollTo({
+            top: messages.scrollHeight, // Scroll to the bottom
+            behavior: 'smooth', // Smooth scrolling
+        });
+    })
+}
 </script>
 
 <template>
+    <div class="users-online">
+        <button type="button" class="btn btn-primary">
+            Users online: <span class="badge badge-light">{{ usersOnline }}</span>
+        </button>
+    </div>
+    <div class="btn-logout">
+        <a
+            class="btn btn-danger" href="/logout"
+            onclick="event.preventDefault();document.getElementById('logout-form').submit();"
+        >
+            Logout
+        </a>
+        <form id="logout-form" action="/logout" method="POST" style="display: none">
+            <input type="hidden" name="_token" :value="csrfToken" />
+        </form>
+    </div>
     <div>
         <div class="chat">
             <div class="chat-title">
                 <h1>Chatroom</h1>
             </div>
             <div class="messages">
-                <div class="messages-content">
-                    <ChatItem v-for="(message, index) in list_messages" :key="index" :message="message"></ChatItem>
-                </div>
+                <ChatItem v-for="(message, index) in list_messages" :key="index" :message="message"></ChatItem>
             </div>
             <div class="message-box">
-                <input type="text" v-model="message" @keyup.enter="sendMessage" class="message-input" placeholder="Type message..."/>
+                <input type="text" v-model="message" @keyup.enter="sendMessage" class="message-input" placeholder="Type message..." />
                 <button type="button" class="message-submit" @click="sendMessage">Send</button>
             </div>
         </div>
@@ -140,8 +196,8 @@ Chat Title
         border: 2px solid rgba(255, 255, 255, 0.24);
 
         img {
-            width: 100%;
-            height: auto;
+        width: 100%;
+        height: auto;
         }
     }
 }
@@ -189,5 +245,19 @@ Message Box
             background: #1D7745;
         }
     }
+}
+
+.users-online {
+    position: absolute;
+    top: 20px;
+    left: 50px;
+    z-index: 3;
+}
+
+.btn-logout {
+    position: absolute;
+    top: 20px;
+    right: 50px;
+    z-index: 3;
 }
 </style>

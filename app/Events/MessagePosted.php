@@ -41,4 +41,3 @@ class MessagePosted implements ShouldBroadcast
         // hoặc: return new Channel('chatroom');
     }
 }
-
